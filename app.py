@@ -2680,6 +2680,39 @@ def build_sql_style_report(excel_data, selected_mpr_date):
                 
                 
                 
+# =========================================================
+# KOTAK JUSPAY ID SPLIT
+#
+# Example:
+# M00006438QR2012624315390033263
+#
+# Merchant ID         = M00006438
+# 1Pay Transaction ID = 2012624315390033263
+# =========================================================
+                
+                
+                
+                
+                
+                
+                
+                kotak_original_id = (
+                    dfx[txn]
+                    .fillna("")
+                    .astype(str)
+                    .str.replace(r"\.0$", "", regex=True)
+                    .str.replace("'", "", regex=False)
+                    .str.strip()
+                    )
+                
+                kotak_merchant_id = kotak_original_id.str[:9]
+                kotak_transaction_id = kotak_original_id.str[-19:]
+                
+                
+                
+                
+                
+                
                 cr_amount = credit.copy()
                 
                 non_pay_mask = type_values.str.upper().ne("PAY")
@@ -2734,20 +2767,23 @@ def build_sql_style_report(excel_data, selected_mpr_date):
                 out_frames.append(
                     pd.DataFrame({
                         "MPR_Date": fmt_date(dfx),
-                        "1Pay_Transaction_ID": (
-                            dfx[txn]
-                            .astype(str)
-                            .str.replace(
-                                r"\.0$",
-                                "",
-                                regex=True
-                            )
-                            .str.strip()
-                        ),
+                        # "1Pay_Transaction_ID": (
+                        #     dfx[txn]
+                        #     .astype(str)
+                        #     .str.replace(
+                        #         r"\.0$",
+                        #         "",
+                        #         regex=True
+                        #     )
+                        #     .str.strip()
+                        # ),
+                        
+                        "1Pay_Transaction_ID": kotak_transaction_id,
                         "Gross_Amt": gross.round(2),
                         "MSFAndCharges": msfchg.round(2),
                         "CR_Amount": cr_amount.round(2),
                         "SP_Name": sp_name_series.values,
+                        "_Kotak_Merchant_ID": kotak_merchant_id,
                         
                         
                         
@@ -3114,7 +3150,7 @@ def build_sql_style_report(excel_data, selected_mpr_date):
         
         # Final SQL column order
         report_df = report_df.reindex(
-            columns=SQL_STYLE_REPORT_COLUMNS
+            columns=SQL_STYLE_REPORT_COLUMNS + ["_Kotak_Merchant_ID"]
             )
         
         
@@ -3575,7 +3611,16 @@ def build_sql_style_report(excel_data, selected_mpr_date):
 def build_sql_style_report_workbook_bytes(report_df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        report_df.to_excel(writer, sheet_name="SQL_Style_Report", index=False)
+        
+        sql_download_df = report_df.drop(
+            columns=["_Kotak_Merchant_ID"],
+            errors="ignore"
+            )
+        
+        #report_df.to_excel(writer, sheet_name="SQL_Style_Report", index=False)
+        
+        sql_download_df.to_excel(writer, sheet_name="SQL_Style_Report", index=False)
+        
         workbook = writer.book
         ws = writer.sheets["SQL_Style_Report"]
 
@@ -3586,7 +3631,11 @@ def build_sql_style_report_workbook_bytes(report_df):
             "border": 1,
         })
         money_fmt = workbook.add_format({"num_format": "#,##0.00"})
-        for col_num, value in enumerate(report_df.columns):
+        # for col_num, value in enumerate(report_df.columns):
+        #     ws.write(0, col_num, value, header_fmt)
+            
+            
+        for col_num, value in enumerate(sql_download_df.columns):
             ws.write(0, col_num, value, header_fmt)
 
         widths = {
@@ -3597,7 +3646,10 @@ def build_sql_style_report_workbook_bytes(report_df):
             "CR_Amount": 16,
             "SP_Name": 22,
         }
-        for idx, col in enumerate(report_df.columns):
+        # for idx, col in enumerate(report_df.columns):
+        #     ws.set_column(idx, idx, widths.get(col, 18))
+            
+        for idx, col in enumerate(sql_download_df.columns):
             ws.set_column(idx, idx, widths.get(col, 18))
         # number format for numeric cols
         for col_name in ["Gross_Amt", "MSFAndCharges", "CR_Amount"]:
@@ -3901,6 +3953,28 @@ def write_sql_to_mpr_extract(
             transaction_id,
             ""
         )
+        
+        # =========================================================
+        # KOTAK JUSPAY - DIRECT MERCHANT ID
+        # No MID lookup required
+        # =========================================================
+        
+        sp_name = str(
+            row.get("SP_Name", "")
+            or ""
+            ).strip()
+        
+        #if sp_name == "25-KotakJusPay UPI":
+        if sp_name.startswith("25-KotakJusPay UPI"):
+            
+            merchant_id = clean_lookup_id(
+                row.get(
+                    "_Kotak_Merchant_ID",
+                    ""
+                    )
+                )
+            
+            
 
         values = [
 
