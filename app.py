@@ -2783,8 +2783,9 @@ def build_sql_style_report(excel_data, selected_mpr_date):
                         "MSFAndCharges": msfchg.round(2),
                         "CR_Amount": cr_amount.round(2),
                         "SP_Name": sp_name_series.values,
-                        "_Kotak_Merchant_ID": kotak_merchant_id,
-                        
+                        #"_Kotak_Merchant_ID": kotak_merchant_id,
+                        "_Kotak_Original_ID": kotak_original_id,
+
                         
                         
                         # Temporary internal column.
@@ -3150,7 +3151,7 @@ def build_sql_style_report(excel_data, selected_mpr_date):
         
         # Final SQL column order
         report_df = report_df.reindex(
-            columns=SQL_STYLE_REPORT_COLUMNS + ["_Kotak_Merchant_ID"]
+            columns=SQL_STYLE_REPORT_COLUMNS + ["_Kotak_Original_ID"]
             )
         
         
@@ -3949,6 +3950,11 @@ def write_sql_to_mpr_extract(
             )
         )
 
+
+# =========================================================
+# DEFAULT: EXISTING MID LOOKUP FOR ALL VENDORS
+# =========================================================
+
         merchant_id = mid_mapping.get(
             transaction_id,
             ""
@@ -3965,15 +3971,20 @@ def write_sql_to_mpr_extract(
             ).strip()
         
         #if sp_name == "25-KotakJusPay UPI":
-        if sp_name.startswith("25-KotakJusPay UPI"):
             
-            merchant_id = clean_lookup_id(
-                row.get(
-                    "_Kotak_Merchant_ID",
-                    ""
-                    )
+        if sp_name.startswith("25-KotakJusPay UPI"):
+            kotak_original_id = clean_lookup_id(
+                row.get("_Kotak_Original_ID", "")
                 )
             
+                
+            
+            if kotak_original_id:
+                # Right 19 digits
+                transaction_id = kotak_original_id[-19:]
+                
+                # Left 9 characters
+                merchant_id = kotak_original_id[:9]
             
 
         values = [
